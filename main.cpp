@@ -36,7 +36,8 @@
  * DEFINES
  ******************************************************************************/
 
-#define DEBUG   // Uncomment for debugging (serial output)
+//#define DEBUG   // Uncomment for debugging (serial output enabled)
+//#define DEBUG2  // Uncomment for debugging (printing out from this file)
 
 #define NB_PARAMS_2CAR   5
 #define NB_PARAMS_2TLMT  10
@@ -98,16 +99,22 @@ void loop() {
     static char mess_wifi_in[WIFI_IN_LENGTH_CH];
     bool wifi_mess_in_received = false;
     bool spi_mess_in_received = false;
+    unsigned int start_time_ms;
+    unsigned int end_time_ms;
+    const unsigned int minimum_time_ms = 50;
+    const unsigned int minimum_time_ack_ms = 500;
+
+    // Each iteration will take at least a specific threshold time to avoid
+    // saturating spi
+    start_time_ms = millis();
 
     // Reconnect Wifi and server if disconnected (blocking)
     myWifi_config();
-
     // Wifi in + decoding
     wifi_mess_in_received = myWifi_recv(mess_wifi_in, WIFI_IN_LENGTH_CH);
     if (wifi_mess_in_received == true) {
         decode_wifi2spi(mess_wifi_in, mess_spi_out);
     }
-    
     // SPI out and in + decoding of spi in
     if (wifi_mess_in_received == true) {
         spi_mess_in_received = mySpi_transmit_uint16(
@@ -116,14 +123,30 @@ void loop() {
         spi_mess_in_received = mySpi_transmit_uint16(
             NULL, 0, mess_spi_in, NB_PARAMS_2TLMT);
     }
-    if (spi_mess_in_received == true) {
-        decode_spi2wifi(mess_spi_in, mess_wifi_out);
-    }
-
     // Wifi out
     if (spi_mess_in_received == true) {
+        decode_spi2wifi(mess_spi_in, mess_wifi_out);
         myWifi_send(mess_wifi_out, WIFI_OUT_LENGTH_CH);
+        // Wait for ack from receiver
+        int ack_received = -1;
+        unsigned int start_time_ack_ms = millis();
+        unsigned int end_time_ack_ms = millis();
+        while (ack_received != 0 and (end_time_ack_ms-start_time_ack_ms) <= minimum_time_ack_ms) {
+            char mess_wifi_in_ack[4] = "";
+            myWifi_recv(mess_wifi_in_ack, 3);
+            ack_received = strcmp(mess_wifi_in_ack, "ack");
+            end_time_ack_ms = millis();
+        }
     }
+
+    // Assure minimum time duration of the iteration
+    end_time_ms = millis();
+    while ((end_time_ms - start_time_ms) <= minimum_time_ms) {
+        end_time_ms = millis();
+    }
+    #if defined (DEBUG2)
+    Serial.println(end_time_ms-start_time_ms);
+    #endif
 }
 
 /*******************************************************************************
@@ -140,7 +163,7 @@ void loop() {
  * @retval None
  ****************************************/
 static void decode_spi2wifi(uint16_t *mess_spi_in, char *mess_wifi_out) {
-    #if defined (DEBUG)
+    #if defined (DEBUG2)
         Serial.print("\nSPI in decoded: ");
     #endif
     char format[5] = "%.5u";
@@ -148,7 +171,7 @@ static void decode_spi2wifi(uint16_t *mess_spi_in, char *mess_wifi_out) {
     for (unsigned int iter=0; iter<NB_PARAMS_2TLMT; iter++) {
         char *mess_ptr = mess_wifi_out + iter*WIFI_CHAR_PER_PARAM;
         snprintf(mess_ptr, WIFI_CHAR_PER_PARAM+1, format, mess_spi_in[iter]);
-        #if defined (DEBUG)
+        #if defined (DEBUG2)
             char mess_debug[WIFI_CHAR_PER_PARAM+1];
             strncpy(mess_debug, mess_ptr, WIFI_CHAR_PER_PARAM);
             Serial.print(mess_debug);
@@ -167,7 +190,7 @@ static void decode_spi2wifi(uint16_t *mess_spi_in, char *mess_wifi_out) {
  * @retval None
  ****************************************/
 static void decode_wifi2spi(char *mess_wifi_in, uint16_t *mess_spi_out) {
-    #if defined (DEBUG)
+    #if defined (DEBUG2)
         Serial.print("\nWifi in decoded: ");
         char format[5] = "%.5u";
         format[2] = (char)WIFI_CHAR_PER_PARAM + '0';
@@ -181,7 +204,7 @@ static void decode_wifi2spi(char *mess_wifi_in, uint16_t *mess_spi_out) {
         unsigned int temp_uint;
         sscanf(temp_ch, "%u", &temp_uint);
         mess_spi_out[iter] = (uint16_t) temp_uint;
-        #if defined (DEBUG)
+        #if defined (DEBUG2)
             char mess_debug[WIFI_CHAR_PER_PARAM+1];
             snprintf(mess_debug, WIFI_CHAR_PER_PARAM+1, format, mess_spi_out[iter]);
             Serial.print(mess_debug);

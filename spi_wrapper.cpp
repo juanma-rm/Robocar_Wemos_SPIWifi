@@ -4,7 +4,11 @@
  * Platform: Wemos D1 mini lite
  * @file spi_wrapper.c
  * @version v1.0
- * @brief Robocar_wemos wrapper for spi communication. 
+ * @brief Robocar_wemos wrapper for spi communication. Slave master (Nucleo 
+ * board) sents two extra values (uint16_t 0x0E0F) as indicator of ending message,
+ * to distinguish between no message sent (all 0s in MISO) and all 0s message
+ * (all 0s message); the former should be ignored. The ending parameter will
+ * be 0 if message has not been sent.
  ******************************************************************************/
 
 /*******************************************************************************
@@ -19,7 +23,7 @@
  * DEFINES
  ******************************************************************************/
 
-#define DEBUG   // Uncomment for debugging (serial output)
+//#define DEBUG   // Uncomment for debugging (serial output)
 
 /*******************************************************************************
  * FUNCTIONS PROTOTYPES
@@ -65,14 +69,17 @@ bool mySpi_transmit_uint16( uint16_t *message_out_ptr,
                             unsigned int message_out_len,
                             uint16_t *message_in_ptr,
                             unsigned int message_in_len) {
-    unsigned int message_max_len = max(message_out_len, message_in_len);
+    const uint16_t end_of_sequence = 0x0E0F;
+    unsigned int message_max_len = max(message_out_len, message_in_len) + 1;
     uint16_t temp_data_in = 0;
     uint16_t temp_data_out = 0;
     bool mess_in_received = false;
     for (unsigned int iter=0; iter < message_max_len; ++iter) {
         // Prepare data to send
-        if (iter < message_out_len) {
+        if (message_out_len > 0 && iter < message_out_len) {
             temp_data_out = message_out_ptr[iter];
+        } else if (message_out_len > 0 && iter == message_out_len) {
+            temp_data_out = end_of_sequence;
         } else {
             temp_data_out = 0;
         }
@@ -81,6 +88,7 @@ bool mySpi_transmit_uint16( uint16_t *message_out_ptr,
         // Store incoming element if not out of range
         if (iter < message_in_len) {
             message_in_ptr[iter] = temp_data_in;
+        } else if (iter == message_in_len && temp_data_in == end_of_sequence) {
             mess_in_received = true;
         }
     }
@@ -89,12 +97,17 @@ bool mySpi_transmit_uint16( uint16_t *message_out_ptr,
         for (unsigned int iter=0; iter<message_out_len; iter++) {
             Serial.print(message_out_ptr[iter]);
             Serial.print(", ");
-        }  
-        Serial.print("\nSPI in: ");
-        for (unsigned int iter=0; iter<message_in_len; iter++) {
-            Serial.print(message_in_ptr[iter]);
-            Serial.print(", ");
         }
+        Serial.print("\nSPI in: ");
+        if (mess_in_received == true) {
+            for (unsigned int iter=0; iter<message_in_len; iter++) {
+                Serial.print(message_in_ptr[iter]);
+                Serial.print(", ");
+            }
+        } else {
+            Serial.print("No data");
+        }
+
     #endif
     return mess_in_received;
 }

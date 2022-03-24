@@ -19,7 +19,7 @@
  * DEFINES
  ******************************************************************************/
 
-#define DEBUG   // Uncomment for debugging (serial output)
+//#define DEBUG   // Uncomment for debugging (serial output)
 
 /*******************************************************************************
  * GLOBAL DATA
@@ -58,7 +58,9 @@ void myWifi_config(void) {
             Serial.print("\nWifi. Connecting..");
         #endif
         while (WiFi.status() != WL_CONNECTED) {
-            Serial.print(".");
+            #if defined (DEBUG)
+                Serial.print(".");
+            #endif
             delay(500);
         }
         #if defined (DEBUG)
@@ -72,7 +74,9 @@ void myWifi_config(void) {
                 Serial.print("\nServer. Connecting..");
             #endif
         while (clientEsp.connect(pyServer_IP, pyServer_port) == false) {
-            Serial.print(".");
+            #if defined (DEBUG)
+                Serial.print(".");
+            #endif
             delay(500);
         }
         clientEsp.setTimeout(100);   // timeout in ms for receiving data
