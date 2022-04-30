@@ -38,6 +38,7 @@
 
 //#define DEBUG   // Uncomment for debugging (serial output enabled)
 //#define DEBUG2  // Uncomment for debugging (printing out from this file)
+//#define DEBUG3  // Uncomment for debugging (emulation of spi data as all zeroes)
 
 #define NB_PARAMS_2CAR   5
 #define NB_PARAMS_2TLMT  10
@@ -123,20 +124,16 @@ void loop() {
         spi_mess_in_received = mySpi_transmit_uint16(
             NULL, 0, mess_spi_in, NB_PARAMS_2TLMT);
     }
+
+    #if defined(DEBUG3)
+    spi_mess_in_received = true;
+    memset(mess_spi_in, 0, NB_PARAMS_2TLMT*sizeof(uint16_t));
+    #endif
+
     // Wifi out
     if (spi_mess_in_received == true) {
         decode_spi2wifi(mess_spi_in, mess_wifi_out);
         myWifi_send(mess_wifi_out, WIFI_OUT_LENGTH_CH);
-        // Wait for ack from receiver
-        int ack_received = -1;
-        unsigned int start_time_ack_ms = millis();
-        unsigned int end_time_ack_ms = millis();
-        while (ack_received != 0 and (end_time_ack_ms-start_time_ack_ms) <= minimum_time_ack_ms) {
-            char mess_wifi_in_ack[4] = "";
-            myWifi_recv(mess_wifi_in_ack, 3);
-            ack_received = strcmp(mess_wifi_in_ack, "ack");
-            end_time_ack_ms = millis();
-        }
     }
 
     // Assure minimum time duration of the iteration
